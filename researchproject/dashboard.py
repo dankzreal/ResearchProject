@@ -1,6 +1,5 @@
 from flask import Flask, render_template
-from dash import Dash, dcc, html
-import dash
+from dash import Dash, dcc, html, Input, Output
 import plotly.express as px
 import pandas as pd
 import os
@@ -18,6 +17,7 @@ app_dash = Dash(__name__, server=server, url_base_pathname='/dash/')
 # Dash Layout
 app_dash.layout = html.Div([
     html.H1("Sentiment Analysis Dashboard"),
+
     dcc.Dropdown(
         id="file-dropdown",
         options=[
@@ -25,17 +25,29 @@ app_dash.layout = html.Div([
         ],
         placeholder="Select a CSV File",
     ),
+
+    dcc.Dropdown(
+        id="sentiment-filter",
+        options=[
+            {"label": "Positive (Compound > 0)", "value": "positive"},
+            {"label": "Neutral (Compound = 0)", "value": "neutral"},
+            {"label": "Negative (Compound < 0)", "value": "negative"}
+        ],
+        placeholder="Filter by Sentiment Type",
+    ),
+
     dcc.Graph(id="sentiment-bar-graph"),
     html.Img(id="wordcloud-image", style={'width': '50%', 'margin': 'auto'})
 ])
 
 
 @app_dash.callback(
-    [dash.dependencies.Output("sentiment-bar-graph", "figure"),
-     dash.dependencies.Output("wordcloud-image", "src")],
-    [dash.dependencies.Input("file-dropdown", "value")]
+    [Output("sentiment-bar-graph", "figure"),
+     Output("wordcloud-image", "src")],
+    [Input("file-dropdown", "value"),
+     Input("sentiment-filter", "value")]
 )
-def update_dashboard(file_name):
+def update_dashboard(file_name, sentiment_filter):
     if file_name is None:
         return {}, ""
 
@@ -43,27 +55,37 @@ def update_dashboard(file_name):
     file_path = os.path.join("Sentiments", file_name)
     df = pd.read_csv(file_path)
 
+    # Apply sentiment filtering based on the sentiment filter
+    if sentiment_filter == "positive":
+        filtered_df = df[df['Sentiment'].apply(lambda x: eval(x)['compound'] > 0)]
+    elif sentiment_filter == "neutral":
+        filtered_df = df[df['Sentiment'].apply(lambda x: eval(x)['compound'] == 0)]
+    elif sentiment_filter == "negative":
+        filtered_df = df[df['Sentiment'].apply(lambda x: eval(x)['compound'] < 0)]
+    else:
+        filtered_df = df  # If no filter is selected, use the entire dataset
+
     # Create sentiment bar chart
     sentiment_labels = ['Negative', 'Neutral', 'Positive', 'Compound']
     sentiment_values = [
-        df['Sentiment'].apply(lambda x: eval(x)['neg']).mean(),
-        df['Sentiment'].apply(lambda x: eval(x)['neu']).mean(),
-        df['Sentiment'].apply(lambda x: eval(x)['pos']).mean(),
-        df['Sentiment'].apply(lambda x: eval(x)['compound']).mean(),
+        filtered_df['Sentiment'].apply(lambda x: eval(x)['neg']).mean(),
+        filtered_df['Sentiment'].apply(lambda x: eval(x)['neu']).mean(),
+        filtered_df['Sentiment'].apply(lambda x: eval(x)['pos']).mean(),
+        filtered_df['Sentiment'].apply(lambda x: eval(x)['compound']).mean(),
     ]
 
     fig = px.bar(
         x=sentiment_labels,
         y=sentiment_values,
         labels={"x": "Sentiment", "y": "Average Score"},
-        title=f"Aggregated Sentiment for {file_name.split('_sentiment')[0]}"
+        title=f"Aggregated Sentiment for {file_name.split('_sentiment')[0]} (Filtered: {sentiment_filter})"
     )
 
-    # Generate word cloud
-    reviews = df['Review'].dropna().tolist()
+    # Generate word cloud for the filtered reviews
+    reviews = filtered_df['Review'].dropna().tolist()
     wordcloud = WordCloud(width=800, height=400, background_color='white').generate(' '.join(reviews))
 
-    # Convert the wordcloud to a base64 image for embedding
+    # Convert the word cloud to a base64 image for embedding
     buffer = BytesIO()
     plt.figure(figsize=(10, 5))
     plt.imshow(wordcloud, interpolation='bilinear')
