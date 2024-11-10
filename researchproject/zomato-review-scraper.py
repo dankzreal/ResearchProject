@@ -6,9 +6,9 @@ from bs4 import BeautifulSoup
 from requests.exceptions import RequestException, Timeout
 
 headers = {'User-Agent': 'Mozilla/5.0 (Macintosh;'
-                         ' Intel Mac OS X 10_15_4)'
-                         ' AppleWebKit/537.36 (KHTML, like Gecko)'
-                         ' Chrome/83.0.4103.97 Safari/537.36'}
+                         ' Intel Mac OS X 10_15_4) '
+                         'AppleWebKit/537.36 (KHTML, like Gecko) '
+                         'Chrome/83.0.4103.97 Safari/537.36'}
 
 
 def clean_reviews(html_text):
@@ -30,9 +30,8 @@ def clean_reviews(html_text):
         return []
 
 
-def save_df(file_name, df):
-    """ Save the DataFrame """
-
+def save_df(file_name, df, restaurant_url, sort_order, num_reviews):
+    """ Save the DataFrame with better filepathing and avoid blank rows """
     # Define a directory to save reviews
     directory = "Reviews"
 
@@ -40,8 +39,16 @@ def save_df(file_name, df):
     if not os.path.exists(directory):
         os.makedirs(directory)
 
-    # Save the DataFrame to a CSV file in the specified directory
-    df.to_csv(f"{directory}/{file_name}.csv", index=False)
+    # Create the file name with sorting and review count
+    file_name = f"{file_name}_{sort_order}_{num_reviews}_reviews.csv"
+
+    # Open the file and write the restaurant URL as the first line
+    with open(f"{directory}/{file_name}", "w", encoding="utf-8", newline='') as file:
+        file.write(f"{restaurant_url}\n")  # Add restaurant URL at the top
+        # Write the DataFrame to CSV without adding extra blank lines
+        df.to_csv(file, index=False, header=True)  # header=True ensures column names are written
+
+    print(f"File saved as: {directory}/{file_name}")
 
 
 def get_reviews(url, max_reviews, sort='popular', save=True):
@@ -51,6 +58,7 @@ def get_reviews(url, max_reviews, sort='popular', save=True):
 
     # Setting variables for the scraping
     max_reviews = max_reviews // 5  # Convert to number of pages (5 reviews per page)
+    sort_order = 'popular' if sort == 'popular' else 'new'  # Set sort order for the filename
     if sort == 'popular':
         sort = '&sort=rd'
     elif sort == 'new':
@@ -101,9 +109,9 @@ def get_reviews(url, max_reviews, sort='popular', save=True):
         columns = ['Author', 'Review URL', 'Description', 'Rating']
         review_df = pd.DataFrame(reviews, columns=columns)
 
-        # Saving the DataFrame
+        # Save reviews in CSV file with restaurant URL and other details
         if save:
-            save_df(restaurant_name, review_df)
+            save_df(restaurant_name, review_df, url, sort_order, len(reviews))
 
         return review_df
 
