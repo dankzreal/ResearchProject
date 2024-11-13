@@ -1,15 +1,16 @@
-from flask import Flask, render_template
-from dash import Dash, dcc, html, Input, Output
-import plotly.express as px
-import pandas as pd
 import os
-from wordcloud import WordCloud
-import matplotlib
-matplotlib.use('Agg')  # Use the 'Agg' backend for non-interactive rendering
-import matplotlib.pyplot as plt
 import base64
 from io import BytesIO
-import dash_table
+
+import pandas as pd
+import matplotlib.pyplot as plt
+from wordcloud import WordCloud
+import matplotlib
+import plotly.express as px
+from flask import Flask, render_template
+from dash import Dash, dcc, html, Input, Output, dash_table
+
+matplotlib.use('Agg')  # For non-interactive backend
 
 # Initialize Flask server
 server = Flask(__name__)
@@ -21,34 +22,24 @@ app_dash = Dash(__name__, server=server, url_base_pathname='/dash/')
 app_dash.layout = html.Div([
     html.H1("Sentiment Analysis Dashboard"),
 
-    # Clickable Restaurant URL
-    html.Div(id='restaurant-url', children=[], style={'margin-bottom': '20px'}),
+    # Restaurant URL
+    html.Div(id='restaurant-url', style={'margin-bottom': '20px'}),
 
-    # Key Metrics (below restaurant URL and above filters)
+    # Key Metrics
     html.Div([
-        html.Div([
-            html.P("Compound Score", style={'fontWeight': 'bold'}),
-            html.P(id="compound-score", style={'fontSize': '20px'})
-        ], style={'display': 'inline-block', 'width': '30%', 'textAlign': 'center'}),
-
-        html.Div([
-            html.P("Restaurant Rating", style={'fontWeight': 'bold'}),
-            html.P(id="avg-rating", style={'fontSize': '20px'})
-        ], style={'display': 'inline-block', 'width': '30%', 'textAlign': 'center'}),
-
-        html.Div([
-            html.P("Total Reviews", style={'fontWeight': 'bold'}),
-            html.P(id="total-reviews", style={'fontSize': '20px'})
-        ], style={'display': 'inline-block', 'width': '30%', 'textAlign': 'center'})
+        html.Div([html.P("Compound Score", style={'fontWeight': 'bold'}),
+                  html.P(id="compound-score", style={'fontSize': '20px'})],
+                 style={'width': '30%', 'textAlign': 'center'}),
+        html.Div([html.P("Restaurant Rating", style={'fontWeight': 'bold'}),
+                  html.P(id="avg-rating", style={'fontSize': '20px'})], style={'width': '30%', 'textAlign': 'center'}),
+        html.Div([html.P("Total Reviews", style={'fontWeight': 'bold'}),
+                  html.P(id="total-reviews", style={'fontSize': '20px'})],
+                 style={'width': '30%', 'textAlign': 'center'}),
     ], style={'margin-bottom': '20px', 'display': 'flex', 'justify-content': 'space-between'}),
 
-    dcc.Dropdown(
-        id="file-dropdown",
-        options=[
-            {"label": file, "value": file} for file in os.listdir("Sentiments") if file.endswith('_sentiment.csv')
-        ],
-        placeholder="Select a CSV File",
-    ),
+    # Dropdowns for file, sentiment, and month filters
+    dcc.Dropdown(id="file-dropdown", options=[{"label": file, "value": file} for file in os.listdir("Sentiments") if
+                                              file.endswith('_sentiment.csv')], placeholder="Select a CSV File"),
 
     dcc.Dropdown(
         id="sentiment-filter",
@@ -58,177 +49,182 @@ app_dash.layout = html.Div([
             {"label": "Negative (Compound < 0)", "value": "negative"}
         ],
         placeholder="Filter by Sentiment Type",
+        multi=True  # Enable multi-select
     ),
 
-    # Month Filter Dropdown
     dcc.Dropdown(
         id="month-filter",
         options=[],  # This will be populated dynamically in the callback
         placeholder="Filter by Month",
+        multi=True  # Enable multi-select
     ),
 
-    # Flexbox Layout for Table and Graphs
+    # Search bar
+    dcc.Input(id="search-bar", type="text", placeholder="Search reviews...", debounce=True,
+              style={'width': '100%', 'margin': '10px 0'}),
+
+    # Layout for Table and Graphs
     html.Div([
-        # Left side: Table
-        html.Div([
-            dash_table.DataTable(id='reviews-table',
-                                 style_table={'height': '80vh', 'overflowY': 'auto'},
-                                 style_cell={'textAlign': 'left', 'whiteSpace': 'normal', 'height': 'auto',
-                                             'lineHeight': '1.5'},
-                                 style_data_conditional=[
-                                     {
-                                         'if': {'column_id': 'Category', 'filter_query': '{Category} = "Positive"'},
-                                         'color': 'green',
-                                         'fontWeight': 'bold'
-                                     },
-                                     {
-                                         'if': {'column_id': 'Category', 'filter_query': '{Category} = "Neutral"'},
-                                         'color': 'yellow',
-                                         'fontWeight': 'bold'
-                                     },
-                                     {
-                                         'if': {'column_id': 'Category', 'filter_query': '{Category} = "Negative"'},
-                                         'color': 'red',
-                                         'fontWeight': 'bold'
-                                     }
-                                 ]),
+        # Table
+        html.Div([dash_table.DataTable(id='reviews-table', style_table={'height': '80vh', 'overflowY': 'auto'},
+                                       style_cell={'textAlign': 'left', 'whiteSpace': 'normal', 'height': 'auto',
+                                                   'lineHeight': '1.5'}, style_data_conditional=[
+                {'if': {'column_id': 'Category', 'filter_query': '{Category} = "Positive"'}, 'color': 'green',
+                 'fontWeight': 'bold'},
+                {'if': {'column_id': 'Category', 'filter_query': '{Category} = "Neutral"'}, 'color': 'yellow',
+                 'fontWeight': 'bold'},
+                {'if': {'column_id': 'Category', 'filter_query': '{Category} = "Negative"'}, 'color': 'red',
+                 'fontWeight': 'bold'}])], style={'width': '40%', 'padding': '20px'}),
 
-        ], style={'width': '40%', 'display': 'inline-block', 'padding': '20px'}),
-
-        # Right side: Graphs
+        # Graphs
         html.Div([
-            dcc.Graph(id="sentiment-bar-graph"),
-            html.Img(id="wordcloud-image", style={'width': '50%', 'margin': 'auto'}),
-            dcc.Graph(id="monthly-reviews-graph")  # New graph for monthly reviews
-        ], style={'width': '55%', 'display': 'inline-block', 'padding': '20px'})
+            # Pie chart and word cloud side by side
+            html.Div([
+                dcc.Graph(id="sentiment-pie-chart", style={'width': '47.5%', 'height': '300px'}),
+                html.Img(id="wordcloud-image", style={'width': '52.5%', 'height': '200px', 'margin': 'auto'})
+            ], style={'display': 'flex', 'justify-content': 'space-between', 'max-width': '100%'}),
+
+            # Full-width line chart below pie chart and word cloud
+            dcc.Graph(id="monthly-sentiment-line-chart", style={'width': '100%', 'height': '400px'}),
+
+            dcc.Graph(id="monthly-reviews-graph")
+        ], style={'width': '55%', 'padding': '20px'})
     ], style={'display': 'flex', 'justify-content': 'space-between'}),
 ])
 
 
-# Update the dashboard callback
+# Updated callback function to filter based on search term
 @app_dash.callback(
-    [Output("sentiment-bar-graph", "figure"),
+    [Output("sentiment-pie-chart", "figure"),
      Output("wordcloud-image", "src"),
      Output("reviews-table", "data"),
      Output("reviews-table", "columns"),
      Output("restaurant-url", "children"),
-     Output("monthly-reviews-graph", "figure"),  # New Output for the monthly reviews chart
-     Output("month-filter", "options"),  # New Output for dynamically updating the month filter
-     Output("compound-score", "children"),  # Output for compound score
-     Output("avg-rating", "children"),  # Output for restaurant rating
-     Output("total-reviews", "children")],  # Output for total reviews
+     Output("monthly-reviews-graph", "figure"),
+     Output("month-filter", "options"),
+     Output("compound-score", "children"),
+     Output("avg-rating", "children"),
+     Output("total-reviews", "children"),
+     Output("monthly-sentiment-line-chart", "figure")],  # New output for the line chart
     [Input("file-dropdown", "value"),
      Input("sentiment-filter", "value"),
-     Input("month-filter", "value")]  # New Input for the month filter
+     Input("month-filter", "value"),
+     Input("search-bar", "value")]  # New input for the search term
 )
-def update_dashboard(file_name, sentiment_filter, selected_month):
+def update_dashboard(file_name, sentiment_filter, selected_month, search_term):
     if file_name is None:
-        return {}, "", [], [], "", {}, [], "", "", ""
+        return {}, "", [], [], "", {}, [], "", "", "", {}
 
-    # Load sentiment CSV data
+    # Load data
     file_path = os.path.join("Sentiments", file_name)
-
-    # Read the first row to extract the restaurant URL and skip it in the actual data frame
     first_row = pd.read_csv(file_path, nrows=1, header=None)
-    restaurant_url = first_row.iloc[0, 0]  # URL is in the first column of the first row
-
-    # Load the rest of the CSV without the URL header
+    restaurant_url = first_row.iloc[0, 0]
     df = pd.read_csv(file_path, skiprows=1)
 
-    # Parse the 'Date' column as datetime and extract the 'Month-Year'
-    df['Date'] = pd.to_datetime(df['Date'], errors='coerce')  # Handle invalid dates
-    df['Month-Year'] = df['Date'].dt.to_period('M').astype(str)  # Format as 'YYYY-MM'
-
-    # Generate month filter options dynamically
+    # Convert date to datetime and create Month-Year column
+    df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
+    df['Month-Year'] = df['Date'].dt.to_period('M').astype(str)
     month_options = [{"label": month, "value": month} for month in df['Month-Year'].unique()]
 
-    # Apply sentiment filtering based on the sentiment filter
-    if sentiment_filter == "positive":
-        filtered_df = df[df['Sentiment'].apply(lambda x: eval(x).get('compound', 0) > 0)]
-    elif sentiment_filter == "neutral":
-        filtered_df = df[df['Sentiment'].apply(lambda x: eval(x).get('compound', 0) == 0)]
-    elif sentiment_filter == "negative":
-        filtered_df = df[df['Sentiment'].apply(lambda x: eval(x).get('compound', 0) < 0)]
+    # Apply sentiment filtering based on multi-select sentiment filter
+    if sentiment_filter:
+        conditions = []
+        if "positive" in sentiment_filter:
+            conditions.append(df['Sentiment'].apply(lambda x: eval(x).get('compound', 0) > 0))
+        if "neutral" in sentiment_filter:
+            conditions.append(df['Sentiment'].apply(lambda x: eval(x).get('compound', 0) == 0))
+        if "negative" in sentiment_filter:
+            conditions.append(df['Sentiment'].apply(lambda x: eval(x).get('compound', 0) < 0))
+        if conditions:
+            sentiment_condition = conditions[0]
+            for condition in conditions[1:]:
+                sentiment_condition |= condition
+            filtered_df = df[sentiment_condition]
+        else:
+            filtered_df = df
     else:
-        filtered_df = df  # If no filter is selected, use the entire dataset
+        filtered_df = df
 
-    # Apply month filter if selected
+    # Apply month filtering based on multi-select month filter
     if selected_month:
-        filtered_df = filtered_df[filtered_df['Month-Year'] == selected_month]
+        filtered_df = filtered_df[filtered_df['Month-Year'].isin(selected_month)]
 
-    # Create sentiment bar chart
-    sentiment_labels = ['Negative', 'Neutral', 'Positive', 'Compound']
-    sentiment_values = [
-        filtered_df['Sentiment'].apply(lambda x: eval(x).get('neg', 0)).mean(),
-        filtered_df['Sentiment'].apply(lambda x: eval(x).get('neu', 0)).mean(),
-        filtered_df['Sentiment'].apply(lambda x: eval(x).get('pos', 0)).mean(),
-        filtered_df['Sentiment'].apply(lambda x: eval(x).get('compound', 0)).mean(),
-    ]
+    # Apply search filtering to match the term with reviews
+    if search_term:
+        search_term = search_term.lower()
+        filtered_df = filtered_df[filtered_df['Review'].str.contains(search_term, case=False, na=False)]
 
-    fig_sentiment = px.bar(
-        x=sentiment_labels,
-        y=sentiment_values,
-        labels={"x": "Sentiment", "y": "Average Score"},
-        title=f"Aggregated Sentiment for {file_name.split('_sentiment')[0]} (Filtered: {sentiment_filter})"
+    # Sentiment Distribution
+    sentiment_counts = {
+        'Positive': (filtered_df['Sentiment'].apply(lambda x: eval(x).get('compound', 0) > 0)).sum(),
+        'Neutral': (filtered_df['Sentiment'].apply(lambda x: eval(x).get('compound', 0) == 0)).sum(),
+        'Negative': (filtered_df['Sentiment'].apply(lambda x: eval(x).get('compound', 0) < 0)).sum()
+    }
+    fig_sentiment = px.pie(
+        names=list(sentiment_counts.keys()),
+        values=list(sentiment_counts.values()),
+        color=list(sentiment_counts.keys()),
+        color_discrete_map={'Positive': 'green', 'Neutral': 'yellow', 'Negative': 'red'},
+        title="Review Sentiment Distribution"
     )
 
-    # Generate word cloud for the filtered reviews
-    reviews = filtered_df['Review'].dropna().tolist()
-    wordcloud = WordCloud(width=800, height=400, background_color='white').generate(' '.join(reviews))
+    # Monthly Sentiment Trend (Line Chart)
+    monthly_sentiment_counts = filtered_df.groupby(['Month-Year']).apply(lambda x: pd.Series({
+        'Positive': (x['Sentiment'].apply(lambda s: eval(s).get('compound', 0) > 0)).sum(),
+        'Neutral': (x['Sentiment'].apply(lambda s: eval(s).get('compound', 0) == 0)).sum(),
+        'Negative': (x['Sentiment'].apply(lambda s: eval(s).get('compound', 0) < 0)).sum()
+    })).reset_index()
 
-    # Convert the word cloud to a base64 image for embedding
+    fig_monthly_sentiment = px.line(
+        monthly_sentiment_counts, x='Month-Year', y=['Positive', 'Neutral', 'Negative'],
+        title="Monthly Sentiment Trend",
+        labels={'value': 'Number of Reviews', 'variable': 'Sentiment'},
+        color_discrete_map={'Positive': 'green', 'Neutral': 'yellow', 'Negative': 'red'}
+    )
+
+    # Reviews per Rating
+    rating_counts = filtered_df['Rating'].value_counts().reset_index(name='Review Count')
+    rating_counts.columns = ['Rating', 'Review Count']
+    fig_reviews_per_rating = px.bar(
+        rating_counts, x='Rating', y='Review Count',
+        title="Reviews per Rating", color='Review Count', color_discrete_sequence=['yellow']
+    )
+
+    # Word Cloud
+    wordcloud = WordCloud(width=800, height=400, background_color='white').generate(
+        ' '.join(filtered_df['Review'].dropna()))
     buffer = BytesIO()
     plt.figure(figsize=(10, 5))
     plt.imshow(wordcloud, interpolation='bilinear')
     plt.axis("off")
     plt.savefig(buffer, format="png")
     plt.close()
-    buffer.seek(0)
     image_base64 = base64.b64encode(buffer.getvalue()).decode()
 
-    # Prepare data for the reviews table
-    reviews_data = []
-    for index, row in filtered_df.iterrows():
-        sentiment = eval(row['Sentiment'])
-        category = "Positive" if sentiment.get('compound', 0) > 0 else "Neutral" if sentiment.get('compound', 0) == 0 else "Negative"
-        reviews_data.append({
-            "Review": row['Review'],
-            "Category": category,
-            "Sentiment": sentiment
-        })
+    # Reviews Table
+    reviews_data = [{"Review": row['Review'],
+                     "Category": "Positive" if eval(row['Sentiment']).get('compound', 0) > 0 else "Neutral" if eval(
+                         row['Sentiment']).get('compound', 0) == 0 else "Negative"} for _, row in
+                    filtered_df.iterrows()]
+    columns = [{"name": "Review", "id": "Review"}, {"name": "Category", "id": "Category"}]
 
-    # Define the columns for the table
-    columns = [
-        {"name": "Review", "id": "Review"},
-        {"name": "Category", "id": "Category"}
-    ]
+    # URL link
+    restaurant_url_link = html.A("Click to go to restaurant's page", href=restaurant_url, target="_blank")
 
-    # Use html.A for clickable restaurant URL
-    restaurant_url_link = html.A(
-        "Click to go to restaurant's page",
-        href=restaurant_url,
-        target="_blank"
-    )
-
-    # Calculate key metrics
-    compound_score = sentiment_values[3]  # Compound sentiment score
-    avg_rating = df['Rating'].mean() if 'Rating' in df.columns else "N/A"  # If 'Rating' is present in the CSV
+    # Key Metrics
+    compound_score = filtered_df['Sentiment'].apply(lambda x: eval(x).get('compound', 0)).mean().round(3)
+    avg_rating = df['Rating'].mean().round(2) if 'Rating' in df.columns else "N/A"
     total_reviews = len(filtered_df)
 
-    # Check if the filtered DataFrame is empty before plotting the monthly reviews graph
+    # Monthly Reviews
     if not filtered_df.empty:
-        # Generate Monthly Reviews Chart
         monthly_reviews_count = filtered_df.groupby('Month-Year').size().reset_index(name='Review Count')
-        fig_monthly_reviews = px.bar(
-            monthly_reviews_count, x='Month-Year', y='Review Count',
-            title="Monthly Review Count", labels={"Month-Year": "Month", "Review Count": "Number of Reviews"}
-        )
+        fig_monthly_reviews = px.bar(monthly_reviews_count, x='Month-Year', y='Review Count',
+                                     title="Monthly Review Count")
     else:
-        # If no data is available, return an empty plot
         fig_monthly_reviews = {}
 
-    # Return all outputs
-    return fig_sentiment, f"data:image/png;base64,{image_base64}", reviews_data, columns, restaurant_url_link, fig_monthly_reviews, month_options, compound_score, avg_rating, total_reviews
+    return fig_sentiment, f"data:image/png;base64,{image_base64}", reviews_data, columns, restaurant_url_link, fig_monthly_reviews, month_options, compound_score, avg_rating, total_reviews, fig_monthly_sentiment
 
 
 # Flask route
@@ -237,6 +233,6 @@ def index():
     return render_template("index.html")
 
 
-# Run the Flask server
+# Run Flask server
 if __name__ == '__main__':
     server.run(debug=True)
