@@ -23,7 +23,7 @@ def load_reviews_from_csv(file_path):
     # Read the rest of the file for reviews (skip the first row)
     data = pd.read_csv(file_path, skiprows=1)
 
-    # Print columns for confirmation (optional, for debugging)
+    # Print columns for confirmation (debugging stuff)
     print(f"Columns in {file_path}: {data.columns.tolist()}")
 
     # Assuming the reviews are in a column named 'Description'
