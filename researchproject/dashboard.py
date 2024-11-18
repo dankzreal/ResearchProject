@@ -212,7 +212,7 @@ def update_dashboard(file_name, sentiment_filter, selected_month, search_term):
         color_discrete_map={'Positive': 'green', 'Neutral': 'yellow', 'Negative': 'red'}
     )
 
-    # Reviews per Rating
+    # Reviews per Rating (currently not used)
     rating_counts = filtered_df['Rating'].value_counts().reset_index(name='Review Count')
     rating_counts.columns = ['Rating', 'Review Count']
     fig_reviews_per_rating = px.bar(
