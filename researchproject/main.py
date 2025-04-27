@@ -18,8 +18,8 @@ def analyze_sentiments():
 def launch_dashboard():
     """ Function to launch the dashboard. """
     print("Launching dashboard...")
-    # Call the dashboard.py here
-    os.system("python dashboard.py")
+    # Call the overview_dashboard.py here
+    os.system("python overview_dashboard.py")
 
 
 def main():
