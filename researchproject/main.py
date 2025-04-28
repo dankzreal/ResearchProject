@@ -15,12 +15,17 @@ def analyze_sentiments():
     os.system("python sentiment-analyzer.py")
 
 
-def launch_dashboard():
-    """ Function to launch the dashboard. """
-    print("Launching dashboard...")
+def launch_overview_dashboard():
+    """ Function to launch the overview dashboard. """
+    print("Launching overview dashboard...")
     # Call the overview_dashboard.py here
     os.system("python overview_dashboard.py")
 
+def launch_comparative_dashboard():
+    """ Function to launch the comparative dashboard. """
+    print("Launching comparative dashboard...")
+    # Call the comparative_dashboard.py here
+    os.system("python comparative_dashboard.py")
 
 def main():
     """ Main function to control the workflow. """
@@ -29,7 +34,8 @@ def main():
     # Options to skip steps
     scrape = input("Do you want to scrape reviews? (y/n): ").strip().lower()
     analyze = input("Do you want to run sentiment analysis? (y/n): ").strip().lower()
-    launch = input("Do you want to launch the dashboard? (y/n): ").strip().lower()
+    launch_overview = input("Do you want to launch the overview dashboard? (y/n): ").strip().lower()
+    launch_comparative = input("Do you want to launch the comparative dashboard? (y/n): ").strip().lower()
 
     if scrape == 'y':
         scrape_reviews()
@@ -41,10 +47,15 @@ def main():
     else:
         print("Skipping sentiment analysis.")
 
-    if launch == 'y':
-        launch_dashboard()
+    if launch_overview == 'y':
+        launch_overview_dashboard()
     else:
-        print("Skipping dashboard launch.")
+        print("Skipping overview dashboard launch.")
+
+    if launch_comparative == 'y':
+        launch_comparative_dashboard()
+    else:
+        print("Skipping comparative dashboard launch.")
 
 
 if __name__ == "__main__":
