@@ -2,9 +2,41 @@ import os
 import pandas as pd
 import nltk
 from nltk.sentiment.vader import SentimentIntensityAnalyzer
+from nltk import word_tokenize, pos_tag, ne_chunk
+from nltk.corpus import stopwords
+from nltk.tree import Tree
 
 # Download necessary NLTK resources
 nltk.download('vader_lexicon')
+nltk.download('punkt')
+nltk.download('averaged_perceptron_tagger')
+nltk.download('maxent_ne_chunker')
+nltk.download('words')
+nltk.download('stopwords')
+
+
+# Function to perform text processing
+def process_text(text):
+    tokens = word_tokenize(text)
+    stop_words = set(stopwords.words('english'))
+    tokens = [t.lower() for t in tokens if t.isalpha()]
+    filtered_tokens = [t for t in tokens if t not in stop_words and len(t) > 2]
+
+    pos_tags = pos_tag(filtered_tokens)
+    named_entities = []
+    chunked = ne_chunk(pos_tags)
+
+    for chunk in chunked:
+        if isinstance(chunk, Tree):
+            entity = " ".join(c[0] for c in chunk)
+            named_entities.append(entity)
+
+    return {
+        'tokens': filtered_tokens,
+        'pos_tags': pos_tags,
+        'bag_of_words': list(set(filtered_tokens)),
+        'named_entities': named_entities
+    }
 
 
 # Function to analyze sentiment of a review
@@ -16,17 +48,13 @@ def analyze_sentiment(review):
 
 # Load CSV file
 def load_reviews_from_csv(file_path):
-    # Read the first row separately to extract the URL
     first_row = pd.read_csv(file_path, nrows=1, header=None)
-    restaurant_url = first_row.iloc[0, 0]  # URL is in the first column of the first row
+    restaurant_url = first_row.iloc[0, 0]
 
-    # Read the rest of the file for reviews (skip the first row)
     data = pd.read_csv(file_path, skiprows=1)
 
-    # Print columns for confirmation (debugging stuff)
     print(f"Columns in {file_path}: {data.columns.tolist()}")
 
-    # Assuming the reviews are in a column named 'Description'
     if 'Description' in data.columns:
         return data['Description'].tolist(), data, restaurant_url
     else:
@@ -39,25 +67,22 @@ def analyze_reviews(file_path):
     reviews, data, restaurant_url = load_reviews_from_csv(file_path)
     results = []
 
-    # Aggregate variables
     num_reviews = len(reviews)
     avg_rating = data['Rating'].mean() if 'Rating' in data.columns else 0
 
-    # Iterate over each review and analyze sentiment
     for review in reviews:
-        # Check if the review is a valid string
-        if isinstance(review, str) and review.strip():  # Skip NaN and empty strings
+        if isinstance(review, str) and review.strip():
             sentiment_scores = analyze_sentiment(review)
+            text_features = process_text(review)
             results.append({
-                'Review': review,
-                'Sentiment': sentiment_scores
+                'Review': ' '.join(text_features['tokens']),
+                'Sentiment': sentiment_scores,
+                'TextFeatures': text_features
             })
         else:
-            # Skip NaN or empty entries
             print(f"Warning: Invalid review encountered (skipped): {review}")
 
-    # Aggregate scores
-    if results:  # Ensure there are results to aggregate
+    if results:
         aggregated_scores = {
             'pos': sum(result['Sentiment']['pos'] for result in results) / len(results),
             'neu': sum(result['Sentiment']['neu'] for result in results) / len(results),
@@ -72,19 +97,16 @@ def analyze_reviews(file_path):
 
 # Let user select a CSV file to analyze
 def select_csv_file(directory='Reviews'):
-    # List all CSV files in the specified directory
     csv_files = [f for f in os.listdir(directory) if f.endswith('.csv')]
 
     if not csv_files:
         print("No CSV files found in the directory.")
         return None
 
-    # Display the available CSV files for selection
     print("Available CSV files:")
     for idx, file in enumerate(csv_files):
         print(f"{idx + 1}. {file}")
 
-    # Prompt the user to select a file
     while True:
         try:
             choice = int(input("Enter the number of the file you want to analyze: "))
@@ -97,54 +119,46 @@ def select_csv_file(directory='Reviews'):
 
 
 # Save results to a CSV file
-def save_sentiment_results(original_file_path, sentiment_results, aggregated_scores, num_reviews, avg_rating, data,
-                           restaurant_url):
-    # Ensure the 'Sentiments' directory exists
+def save_sentiment_results(original_file_path, sentiment_results, aggregated_scores, num_reviews, avg_rating, data, restaurant_url):
     os.makedirs("Sentiments", exist_ok=True)
 
-    # Prepare results DataFrame
     results_data = []
     for idx, result in enumerate(sentiment_results):
         review = result['Review']
         sentiment = result['Sentiment']
-        rating = data.iloc[idx]['Rating']  # Get the Rating from the DataFrame
-        date = data.iloc[idx]['Date']  # Get the Date from the DataFrame
+        rating = data.iloc[idx]['Rating']
+        date = data.iloc[idx]['Date']
+        text_features = result['TextFeatures']
+
         results_data.append({
             'Review': review,
-            'Sentiment': sentiment,
+            'Sentiment': str(sentiment),
             'Rating': rating,
-            'Date': date
+            'Date': date,
+            'BagOfWordsSize': len(text_features['bag_of_words']),
+            'NamedEntitiesCount': len(text_features['named_entities'])
         })
 
-    # Create the results DataFrame
     results_df = pd.DataFrame(results_data)
 
-    # Get original file name and remove '_reviews' part for the sentiment file
     original_file_name = os.path.basename(original_file_path)
-    base_file_name = os.path.splitext(original_file_name)[0]  # Remove file extension
-    new_file_name = base_file_name.replace('_reviews', '') + '_sentiment.csv'  # Remove '_reviews' and add '_sentiment'
-
+    base_file_name = os.path.splitext(original_file_name)[0]
+    new_file_name = base_file_name.replace('_reviews', '') + '_sentiment.csv'
     new_file_path = os.path.join("Sentiments", new_file_name)
 
-    # Save the results DataFrame to CSV
     with open(new_file_path, mode='w', newline='', encoding='utf-8') as f:
-        # Write the restaurant URL in the first row as a header
         f.write(f"{restaurant_url}\n")
-
-        # Now, write the column headers (without the restaurant URL)
         results_df.to_csv(f, index=False)
 
-    # Save aggregated scores with '_aggregated' suffix (no restaurant URL)
     aggregated_scores_df = pd.DataFrame([aggregated_scores])
     aggregated_file_name = base_file_name.replace('_reviews', '') + '_aggregated.csv'
     aggregated_file_path = os.path.join("Sentiments", aggregated_file_name)
     aggregated_scores_df.to_csv(aggregated_file_path, index=False)
 
-    # Prepare master data for CSV (including restaurant name and URL)
-    restaurant_name = base_file_name.replace('_reviews', '')  # Extract restaurant name from base file name
+    restaurant_name = base_file_name.replace('_reviews', '')
     master_data = {
-        'Name': restaurant_name,  # Add restaurant name
-        'URL': restaurant_url,  # Add restaurant URL
+        'Name': restaurant_name,
+        'URL': restaurant_url,
         'Reviews': num_reviews,
         'Rating': avg_rating,
         'Positive': aggregated_scores['pos'],
@@ -153,7 +167,6 @@ def save_sentiment_results(original_file_path, sentiment_results, aggregated_sco
         'Compound': aggregated_scores['compound']
     }
 
-    # Update the master sentiment CSV (restaurant URL included here)
     update_master_sentiment_csv(master_data)
 
 
@@ -161,17 +174,13 @@ def save_sentiment_results(original_file_path, sentiment_results, aggregated_sco
 def update_master_sentiment_csv(master_data):
     master_file_path = "Sentiments/master_sentiment.csv"
 
-    # Check if the master CSV exists
     if os.path.exists(master_file_path):
-        # If exists, read the existing data and append the new data
         master_df = pd.read_csv(master_file_path)
         master_df = pd.concat([master_df, pd.DataFrame([master_data])], ignore_index=True)
     else:
-        # If doesn't exist, create it and add header
         columns = ['Name', 'URL', 'Reviews', 'Rating', 'Positive', 'Neutral', 'Negative', 'Compound']
         master_df = pd.DataFrame([master_data], columns=columns)
 
-    # Save back to the master CSV
     master_df.to_csv(master_file_path, index=False)
 
 
@@ -182,8 +191,7 @@ def main():
 
         if file_path:
             print(f"Analyzing {file_path}...\n")
-            sentiment_results, aggregated_scores, num_reviews, avg_rating, data, restaurant_url = analyze_reviews(
-                file_path)
+            sentiment_results, aggregated_scores, num_reviews, avg_rating, data, restaurant_url = analyze_reviews(file_path)
 
             for result in sentiment_results:
                 print(f"Review: {result['Review']}")
@@ -196,9 +204,7 @@ def main():
             print(f"Positive: {aggregated_scores['pos']:.2f}")
             print(f"Compound: {aggregated_scores['compound']:.2f}")
 
-            # Save results to CSV
-            save_sentiment_results(file_path, sentiment_results, aggregated_scores, num_reviews, avg_rating, data,
-                                   restaurant_url)
+            save_sentiment_results(file_path, sentiment_results, aggregated_scores, num_reviews, avg_rating, data, restaurant_url)
 
         while True:
             choice = input("\nWould you like to analyze another file? (y/n): ").strip().lower()

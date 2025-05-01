@@ -14,19 +14,17 @@ matplotlib.use('Agg')  # For non-interactive backend
 # Initialize Flask server
 server = Flask(__name__)
 
-# Custom CSS to import Montserrat font
 external_stylesheets = [
     'https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&display=swap'
 ]
 
-# Initialize Dash app with external stylesheets
+# Initialize Dash app
 app_dash = Dash(__name__, server=server, url_base_pathname='/dash/', external_stylesheets=external_stylesheets)
 
 # Dash Layout
 app_dash.layout = html.Div([
     html.H1("Sentiment Analysis Dashboard", style={'fontFamily': 'Montserrat'}),
 
-    # Restaurant URL
     html.Div(id='restaurant-url', style={'margin-bottom': '20px', 'fontFamily': 'Montserrat'}),
 
     # Key Metrics
@@ -34,20 +32,31 @@ app_dash.layout = html.Div([
         html.Div([
             html.P("Compound Score", style={'fontWeight': 'bold', 'fontFamily': 'Montserrat'}),
             html.P(id="compound-score", style={'fontSize': '20px', 'fontFamily': 'Montserrat'})
-        ], style={'width': '30%', 'textAlign': 'center', 'backgroundColor': '#f0f0f0', 'padding': '10px', 'borderRadius': '5px'}),
+        ], style={'width': '20%', 'textAlign': 'center', 'backgroundColor': '#f0f0f0', 'padding': '10px', 'borderRadius': '5px'}),
 
         html.Div([
             html.P("Restaurant Rating", style={'fontWeight': 'bold', 'fontFamily': 'Montserrat'}),
             html.P(id="avg-rating", style={'fontSize': '20px', 'fontFamily': 'Montserrat'})
-        ], style={'width': '30%', 'textAlign': 'center', 'backgroundColor': '#f0f0f0', 'padding': '10px', 'borderRadius': '5px'}),
+        ], style={'width': '20%', 'textAlign': 'center', 'backgroundColor': '#f0f0f0', 'padding': '10px', 'borderRadius': '5px'}),
 
         html.Div([
             html.P("Total Reviews", style={'fontWeight': 'bold', 'fontFamily': 'Montserrat'}),
             html.P(id="total-reviews", style={'fontSize': '20px', 'fontFamily': 'Montserrat'})
-        ], style={'width': '30%', 'textAlign': 'center', 'backgroundColor': '#f0f0f0', 'padding': '10px', 'borderRadius': '5px'}),
+        ], style={'width': '20%', 'textAlign': 'center', 'backgroundColor': '#f0f0f0', 'padding': '10px', 'borderRadius': '5px'}),
+
+        html.Div([
+            html.P("Avg BagOfWords Size", style={'fontWeight': 'bold', 'fontFamily': 'Montserrat'}),
+            html.P(id="avg-bowsize", style={'fontSize': '20px', 'fontFamily': 'Montserrat'})
+        ], style={'width': '20%', 'textAlign': 'center', 'backgroundColor': '#f0f0f0', 'padding': '10px', 'borderRadius': '5px'}),
+
+        html.Div([
+            html.P("Avg Named Entities", style={'fontWeight': 'bold', 'fontFamily': 'Montserrat'}),
+            html.P(id="avg-nersize", style={'fontSize': '20px', 'fontFamily': 'Montserrat'})
+        ], style={'width': '20%', 'textAlign': 'center', 'backgroundColor': '#f0f0f0', 'padding': '10px', 'borderRadius': '5px'}),
+
     ], style={'margin-bottom': '20px', 'display': 'flex', 'justify-content': 'space-between'}),
 
-    # Dropdowns for file, sentiment, and month filters
+    # Dropdowns
     dcc.Dropdown(
         id="file-dropdown",
         options=[{"label": file, "value": file} for file in os.listdir("Sentiments") if file.endswith('_sentiment.csv')],
@@ -84,7 +93,7 @@ app_dash.layout = html.Div([
         style={'width': '100%', 'margin': '10px 0', 'fontFamily': 'Montserrat'}
     ),
 
-    # Layout for Table and Graphs
+    # Table and graphs
     html.Div([
         # Table
         html.Div([
@@ -103,27 +112,25 @@ app_dash.layout = html.Div([
                     {'if': {'column_id': 'Category', 'filter_query': '{Category} = "Neutral"'}, 'color': 'yellow', 'fontWeight': 'bold'},
                     {'if': {'column_id': 'Category', 'filter_query': '{Category} = "Negative"'}, 'color': 'red', 'fontWeight': 'bold'}
                 ]
-            )
-        ], style={'width': '40%', 'padding': '20px'}),  # Removed backgroundColor here
+            ),
+            dcc.Graph(id="bowsize-trend"),
+            dcc.Graph(id="nersize-trend"),
+        ], style={'width': '40%', 'padding': '20px'}),
 
         # Graphs
         html.Div([
-            # Pie chart and word cloud side by side
             html.Div([
                 dcc.Graph(id="sentiment-pie-chart", style={'width': '50%', 'height': '325px'}),
                 html.Img(id="wordcloud-image", style={'width': '52.5%', 'height': '200px', 'margin': 'auto'})
             ], style={'display': 'flex', 'justify-content': 'space-between', 'max-width': '100%'}),
-
-            # Full-width line chart below pie chart and word cloud
             dcc.Graph(id="monthly-sentiment-line-chart", style={'width': '100%', 'height': '400px'}),
-
             dcc.Graph(id="monthly-reviews-graph")
-        ], style={'width': '55%', 'padding': '20px'})  # Removed backgroundColor here
+        ], style={'width': '55%', 'padding': '20px'})
     ], style={'display': 'flex', 'justify-content': 'space-between'}),
 ], style={'fontFamily': 'Montserrat'})
 
 
-# Updated callback function to filter based on search term
+# Callback
 @app_dash.callback(
     [Output("sentiment-pie-chart", "figure"),
      Output("wordcloud-image", "src"),
@@ -135,7 +142,11 @@ app_dash.layout = html.Div([
      Output("compound-score", "children"),
      Output("avg-rating", "children"),
      Output("total-reviews", "children"),
-     Output("monthly-sentiment-line-chart", "figure")],
+     Output("monthly-sentiment-line-chart", "figure"),
+     Output("bowsize-trend", "figure"),
+     Output("nersize-trend", "figure"),
+     Output("avg-bowsize", "children"),
+     Output("avg-nersize", "children")],
     [Input("file-dropdown", "value"),
      Input("sentiment-filter", "value"),
      Input("month-filter", "value"),
@@ -143,20 +154,18 @@ app_dash.layout = html.Div([
 )
 def update_dashboard(file_name, sentiment_filter, selected_month, search_term):
     if file_name is None:
-        return {}, "", [], [], "", {}, [], "", "", "", {}
+        return {}, "", [], [], "", {}, [], "", "", "", {}, {}, {}, "", ""
 
-    # Load data
     file_path = os.path.join("Sentiments", file_name)
     first_row = pd.read_csv(file_path, nrows=1, header=None)
     restaurant_url = first_row.iloc[0, 0]
     df = pd.read_csv(file_path, skiprows=1)
 
-    # Convert date to datetime and create Month-Year column
     df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
     df['Month-Year'] = df['Date'].dt.to_period('M').astype(str)
     month_options = [{"label": month, "value": month} for month in df['Month-Year'].unique()]
 
-    # Apply sentiment filtering based on multi-select sentiment filter
+    # Filtering
     if sentiment_filter:
         conditions = []
         if "positive" in sentiment_filter:
@@ -165,26 +174,21 @@ def update_dashboard(file_name, sentiment_filter, selected_month, search_term):
             conditions.append(df['Sentiment'].apply(lambda x: eval(x).get('compound', 0) == 0))
         if "negative" in sentiment_filter:
             conditions.append(df['Sentiment'].apply(lambda x: eval(x).get('compound', 0) < 0))
-        if conditions:
-            sentiment_condition = conditions[0]
-            for condition in conditions[1:]:
-                sentiment_condition |= condition
-            filtered_df = df[sentiment_condition]
-        else:
-            filtered_df = df
+        sentiment_condition = conditions[0]
+        for condition in conditions[1:]:
+            sentiment_condition |= condition
+        filtered_df = df[sentiment_condition]
     else:
         filtered_df = df
 
-    # Apply month filtering based on multi-select month filter
     if selected_month:
         filtered_df = filtered_df[filtered_df['Month-Year'].isin(selected_month)]
 
-    # Apply search filtering to match the term with reviews
     if search_term:
         search_term = search_term.lower()
         filtered_df = filtered_df[filtered_df['Review'].str.contains(search_term, case=False, na=False)]
 
-    # Sentiment Distribution
+    # Sentiment pie
     sentiment_counts = {
         'Positive': (filtered_df['Sentiment'].apply(lambda x: eval(x).get('compound', 0) > 0)).sum(),
         'Neutral': (filtered_df['Sentiment'].apply(lambda x: eval(x).get('compound', 0) == 0)).sum(),
@@ -198,7 +202,32 @@ def update_dashboard(file_name, sentiment_filter, selected_month, search_term):
         title="Review Sentiment Distribution"
     )
 
-    # Monthly Sentiment Trend (Line Chart)
+    # Wordcloud
+    wordcloud = WordCloud(width=800, height=400, background_color='white').generate(
+        ' '.join(filtered_df['Review'].dropna()))
+    buffer = BytesIO()
+    plt.figure(figsize=(10, 5))
+    plt.imshow(wordcloud, interpolation='bilinear')
+    plt.axis("off")
+    plt.savefig(buffer, format="png")
+    plt.close()
+    image_base64 = base64.b64encode(buffer.getvalue()).decode()
+
+    # Table
+    reviews_data = [{"Review": row['Review'],
+                     "Category": "Positive" if eval(row['Sentiment']).get('compound', 0) > 0 else "Neutral" if eval(
+                         row['Sentiment']).get('compound', 0) == 0 else "Negative"} for _, row in filtered_df.iterrows()]
+    columns = [{"name": "Review", "id": "Review"}, {"name": "Category", "id": "Category"}]
+
+    # Metrics
+    compound_score = filtered_df['Sentiment'].apply(lambda x: eval(x).get('compound', 0)).mean().round(3)
+    avg_rating = df['Rating'].mean().round(2) if 'Rating' in df.columns else "N/A"
+    total_reviews = len(filtered_df)
+
+    avg_bowsize = filtered_df['BagOfWordsSize'].mean().round(2)
+    avg_nersize = filtered_df['NamedEntitiesCount'].mean().round(2)
+
+    # Monthly line chart (sentiments)
     monthly_sentiment_counts = filtered_df.groupby(['Month-Year']).apply(lambda x: pd.Series({
         'Positive': (x['Sentiment'].apply(lambda s: eval(s).get('compound', 0) > 0)).sum(),
         'Neutral': (x['Sentiment'].apply(lambda s: eval(s).get('compound', 0) == 0)).sum(),
@@ -212,49 +241,28 @@ def update_dashboard(file_name, sentiment_filter, selected_month, search_term):
         color_discrete_map={'Positive': 'green', 'Neutral': 'yellow', 'Negative': 'red'}
     )
 
-    # Reviews per Rating (currently not used)
-    rating_counts = filtered_df['Rating'].value_counts().reset_index(name='Review Count')
-    rating_counts.columns = ['Rating', 'Review Count']
-    fig_reviews_per_rating = px.bar(
-        rating_counts, x='Rating', y='Review Count',
-        title="Reviews per Rating", color='Review Count', color_discrete_sequence=['yellow']
-    )
-
-    # Word Cloud
-    wordcloud = WordCloud(width=800, height=400, background_color='white').generate(
-        ' '.join(filtered_df['Review'].dropna()))
-    buffer = BytesIO()
-    plt.figure(figsize=(10, 5))
-    plt.imshow(wordcloud, interpolation='bilinear')
-    plt.axis("off")
-    plt.savefig(buffer, format="png")
-    plt.close()
-    image_base64 = base64.b64encode(buffer.getvalue()).decode()
-
-    # Reviews Table
-    reviews_data = [{"Review": row['Review'],
-                     "Category": "Positive" if eval(row['Sentiment']).get('compound', 0) > 0 else "Neutral" if eval(
-                         row['Sentiment']).get('compound', 0) == 0 else "Negative"} for _, row in
-                    filtered_df.iterrows()]
-    columns = [{"name": "Review", "id": "Review"}, {"name": "Category", "id": "Category"}]
-
-    # URL link
-    restaurant_url_link = html.A("Click to go to restaurant's page", href=restaurant_url, target="_blank")
-
-    # Key Metrics
-    compound_score = filtered_df['Sentiment'].apply(lambda x: eval(x).get('compound', 0)).mean().round(3)
-    avg_rating = df['Rating'].mean().round(2) if 'Rating' in df.columns else "N/A"
-    total_reviews = len(filtered_df)
-
     # Monthly Reviews
     if not filtered_df.empty:
         monthly_reviews_count = filtered_df.groupby('Month-Year').size().reset_index(name='Review Count')
-        fig_monthly_reviews = px.bar(monthly_reviews_count, x='Month-Year', y='Review Count',
-                                     title="Monthly Review Count")
+        fig_monthly_reviews = px.bar(monthly_reviews_count, x='Month-Year', y='Review Count', title="Monthly Review Count")
     else:
         fig_monthly_reviews = {}
 
-    return fig_sentiment, f"data:image/png;base64,{image_base64}", reviews_data, columns, restaurant_url_link, fig_monthly_reviews, month_options, compound_score, avg_rating, total_reviews, fig_monthly_sentiment
+    # BOW size trend
+    bowsize_trend = filtered_df.groupby('Month-Year')['BagOfWordsSize'].mean().reset_index()
+    fig_bowsize = px.line(bowsize_trend, x='Month-Year', y='BagOfWordsSize', title="Avg BagOfWords Size Over Time")
+
+    # NER size trend
+    nersize_trend = filtered_df.groupby('Month-Year')['NamedEntitiesCount'].mean().reset_index()
+    fig_nersize = px.line(nersize_trend, x='Month-Year', y='NamedEntitiesCount', title="Avg Named Entities Over Time")
+
+    restaurant_url_link = html.A("Click to go to restaurant's page", href=restaurant_url, target="_blank")
+
+    return (fig_sentiment, f"data:image/png;base64,{image_base64}", reviews_data, columns,
+            restaurant_url_link, fig_monthly_reviews, month_options,
+            compound_score, avg_rating, total_reviews,
+            fig_monthly_sentiment, fig_bowsize, fig_nersize,
+            avg_bowsize, avg_nersize)
 
 
 # Flask route
@@ -266,3 +274,4 @@ def index():
 # Run Flask server
 if __name__ == '__main__':
     server.run(debug=True)
+
